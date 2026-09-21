@@ -822,16 +822,28 @@
     return null;
   }
 
-  async function fetchFromOpenLibrary(title, author) {
-    const q = `title=${encodeURIComponent(title)}&author=${encodeURIComponent(author)}&limit=5&fields=cover_i,title`;
-    const data = await fetchJson(`https://openlibrary.org/search.json?${q}`);
+  function pickBestOpenLibraryMatch(data, requestedTitle) {
     const docs = data.docs || [];
     for (const doc of docs) {
       if (!doc.cover_i) continue;
-      if (!titlesLooselyMatch(title, doc.title)) continue;
+      if (!titlesLooselyMatch(requestedTitle, doc.title)) continue;
       return `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg`;
     }
     return null;
+  }
+
+  async function fetchFromOpenLibrary(title, author) {
+    const q = `title=${encodeURIComponent(title)}&author=${encodeURIComponent(author)}&limit=5&fields=cover_i,title`;
+    const data = await fetchJson(`https://openlibrary.org/search.json?${q}`);
+    return pickBestOpenLibraryMatch(data, title);
+  }
+
+  // Looser pass for a shortened/misremembered title, general full-text search
+  // instead of exact title/author fields.
+  async function fetchFromOpenLibraryLoose(title, author) {
+    const q = `q=${encodeURIComponent(title + " " + author)}&limit=5&fields=cover_i,title`;
+    const data = await fetchJson(`https://openlibrary.org/search.json?${q}`);
+    return pickBestOpenLibraryMatch(data, title);
   }
 
   // A small queue so cover lookups go out staggered, not all at once — the
@@ -845,9 +857,13 @@
     coverQueueDelay += 350;
     await new Promise(r => setTimeout(r, myDelay));
 
+    // Open Library first: it doesn't rate-limit like Google Books' keyless
+    // endpoint does, so trying it first avoids paying for a failed/slow
+    // Google call on every single lookup. Google Books is the backup.
     const strategies = [
-      () => fetchFromGoogleBooksStrict(title, author),
       () => fetchFromOpenLibrary(title, author),
+      () => fetchFromOpenLibraryLoose(title, author),
+      () => fetchFromGoogleBooksStrict(title, author),
       () => fetchFromGoogleBooksLoose(title, author),
     ];
     let url = null;
