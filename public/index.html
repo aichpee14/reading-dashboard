@@ -259,6 +259,40 @@
   @media (max-width: 520px) { .modal-grid { grid-template-columns: 1fr; } }
   .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
   .modal-card .field input, .modal-card .field select { width: 100%; box-sizing: border-box; }
+  /* Add Book — web search */
+  .book-search-wrap { position: relative; margin-bottom: 16px; }
+  #bookSearchInput { width: 100%; box-sizing: border-box; }
+  .book-search-results { position: absolute; top: 100%; left: 0; right: 0; z-index: 10; margin-top: 6px;
+    background: var(--surface-1); backdrop-filter: blur(16px); border: 1px solid var(--border); border-radius: 12px;
+    max-height: 340px; overflow-y: auto; box-shadow: 0 16px 40px rgba(0,0,0,0.28); }
+  .bsr-item { display: flex; gap: 11px; width: 100%; text-align: left; background: none; border: none;
+    border-bottom: 1px solid var(--grid); padding: 9px 12px; cursor: pointer; align-items: center; font-family: inherit; color: var(--text-primary); }
+  .bsr-item:last-child { border-bottom: none; }
+  .bsr-item:hover { background: var(--vibe-gradient-soft); }
+  .bsr-cover { width: 32px; height: 46px; flex: 0 0 auto; border-radius: 5px; background: var(--page-plane);
+    display: flex; align-items: center; justify-content: center; overflow: hidden; font-size: 16px; }
+  .bsr-cover img { width: 100%; height: 100%; object-fit: cover; }
+  .bsr-meta { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
+  .bsr-title { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bsr-sub { font-size: 12px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bsr-empty { padding: 12px 14px; color: var(--text-secondary); font-size: 13px; }
+  .bsr-loading { padding: 12px 14px; color: var(--text-secondary); font-size: 13px; }
+  /* Discover — recommendations */
+  h3.plain-h3 { text-transform: none; letter-spacing: 0; font-size: 16px; font-family: var(--font-display); color: var(--text-primary); margin: 0 0 4px; }
+  .rec-section { margin-top: 18px; }
+  .rec-section .rec-head { font-family: var(--font-display); font-size: 14px; font-weight: 700; color: var(--text-primary); margin: 0 0 10px; }
+  .rec-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 14px; }
+  .rec-card { background: var(--page-plane); border: 1px solid var(--border); border-radius: 12px; padding: 10px; cursor: pointer;
+    text-align: left; font-family: inherit; color: var(--text-primary); display: flex; flex-direction: column; gap: 6px; position: relative;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease; }
+  .rec-card:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(139,92,246,0.20); border-color: color-mix(in srgb, var(--vibe-purple) 40%, var(--border)); }
+  .rec-cover { aspect-ratio: 2/3; border-radius: 7px; overflow: hidden; background: var(--surface-1); display: flex; align-items: center; justify-content: center; font-size: 26px; }
+  .rec-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .rec-title { font-weight: 700; font-size: 13px; line-height: 1.22; }
+  .rec-author { font-size: 12px; color: var(--text-secondary); margin-top: -2px; }
+  .rec-why { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--vibe-purple); background: rgba(139,92,246,0.12); border-radius: 6px; padding: 2px 7px; align-self: flex-start; }
+  .rec-add { position: absolute; top: 8px; right: 8px; background: var(--vibe-gradient); color: #fff; border-radius: 999px; font-size: 11px; font-weight: 700; padding: 3px 9px; opacity: 0; transform: translateY(-3px); transition: opacity 0.15s ease, transform 0.15s ease; }
+  .rec-card:hover .rec-add { opacity: 1; transform: translateY(0); }
 
   .empty-state { text-align: center; padding: 60px 20px; color: var(--text-secondary); }
   .empty-state h2 { color: var(--text-primary); font-size: 18px; }
@@ -382,6 +416,7 @@
 <nav class="tabs">
   <button data-tab="overview" class="active">Overview</button>
   <button data-tab="books">Books</button>
+  <button data-tab="discover">Discover</button>
   <button data-tab="streaks">Streaks &amp; Consistency</button>
   <button data-tab="goals">Goals &amp; Pacing</button>
   <button data-tab="genres">Genres &amp; Authors</button>
@@ -542,6 +577,15 @@
     </div>
   </section>
 
+  <!-- DISCOVER -->
+  <section class="panel" id="panel-discover">
+    <div class="card">
+      <h3 class="plain-h3">✨ For you — based on what you've read</h3>
+      <p class="drawer-summary-note">Suggestions from OpenLibrary, drawn from your authors and favourite genres. Click any book to add it to your shelf (as “to read”). Already-shelved books are hidden.</p>
+      <div id="discoverBody"></div>
+    </div>
+  </section>
+
   <!-- SETTINGS -->
   <section class="panel" id="panel-settings">
     <div class="card" style="max-width:560px;">
@@ -590,6 +634,10 @@
 <div id="bookModal" class="modal-overlay" style="display:none;">
   <div class="modal-card">
     <h3 id="bookModalTitle">Add Book</h3>
+    <div class="book-search-wrap">
+      <input type="text" id="bookSearchInput" placeholder="🔎 Search the web for a book — title or author…" autocomplete="off">
+      <div id="bookSearchResults" class="book-search-results" hidden></div>
+    </div>
     <form id="bookForm" autocomplete="off">
       <input type="hidden" id="bookId">
       <div class="modal-grid">
@@ -1521,6 +1569,7 @@
   function openBookModal(book) {
     refreshDatalists();
     document.getElementById("bookError").textContent = "";
+    if (bookSearchInput) { bookSearchInput.value = ""; hideBookResults(); }
     const set = (id, v) => { document.getElementById(id).value = (v == null ? "" : v); };
     if (book && book.id != null) {
       document.getElementById("bookModalTitle").textContent = "Edit Book";
@@ -1574,6 +1623,7 @@
       if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error || ("HTTP " + res.status)); }
       closeBookModal();
       await loadData();
+      if (document.getElementById("panel-discover").classList.contains("active")) renderDiscover(true);
     } catch (err) {
       document.getElementById("bookError").textContent = "Save failed: " + err.message;
     } finally {
@@ -1594,6 +1644,78 @@
       if (!res.ok && res.status !== 204) throw new Error("HTTP " + res.status);
       await loadData();
     } catch (err) { alert("Delete failed: " + err.message); }
+  }
+
+  // ---------- Add Book: web search (OpenLibrary) ----------
+  const bookSearchInput = document.getElementById("bookSearchInput");
+  const bookSearchResults = document.getElementById("bookSearchResults");
+  let bookSearchToken = 0;
+  let bookSearchTimer = null;
+
+  function hideBookResults() { bookSearchResults.hidden = true; bookSearchResults.innerHTML = ""; bookSearchResults._docs = null; }
+
+  async function runBookSearch(query) {
+    const token = ++bookSearchToken;
+    bookSearchResults.innerHTML = `<div class="bsr-loading">Searching…</div>`;
+    bookSearchResults.hidden = false;
+    try {
+      const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}` +
+        `&fields=title,author_name,first_publish_year,number_of_pages_median,cover_i&limit=8`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const data = await res.json();
+      if (token !== bookSearchToken) return; // superseded by a newer keystroke
+      const docs = (data.docs || []).filter(d => d.title);
+      if (!docs.length) {
+        bookSearchResults.innerHTML = `<div class="bsr-empty">No matches — you can still type the details in below.</div>`;
+        return;
+      }
+      bookSearchResults._docs = docs;
+      bookSearchResults.innerHTML = docs.map((d, i) => {
+        const author = (d.author_name && d.author_name[0]) || "";
+        const meta = [d.first_publish_year || "", d.number_of_pages_median ? d.number_of_pages_median + " pp" : ""].filter(Boolean).join(" · ");
+        const thumb = d.cover_i ? `https://covers.openlibrary.org/b/id/${d.cover_i}-S.jpg` : "";
+        return `<button type="button" class="bsr-item" data-i="${i}">
+          <span class="bsr-cover">${thumb ? `<img src="${thumb}" alt="" loading="lazy" onerror="this.remove()">` : "📖"}</span>
+          <span class="bsr-meta">
+            <span class="bsr-title">${escapeHtml(d.title)}</span>
+            <span class="bsr-sub">${escapeHtml(author)}${meta ? " · " + meta : ""}</span>
+          </span>
+        </button>`;
+      }).join("");
+    } catch (e) {
+      if (token !== bookSearchToken) return;
+      bookSearchResults.innerHTML = `<div class="bsr-empty">Couldn't reach the book search — type the details in below.</div>`;
+    }
+  }
+
+  function selectSearchedBook(d) {
+    document.getElementById("bf_title").value = d.title || "";
+    document.getElementById("bf_author").value = (d.author_name && d.author_name[0]) || "";
+    document.getElementById("bf_total").value = d.number_of_pages_median || "";
+    document.getElementById("bf_cover").value = d.cover_i ? `https://covers.openlibrary.org/b/id/${d.cover_i}-L.jpg` : "";
+    hideBookResults();
+    bookSearchInput.value = "";
+    document.getElementById("bf_status").focus();
+  }
+
+  if (bookSearchInput) {
+    bookSearchInput.addEventListener("input", () => {
+      const q = bookSearchInput.value.trim();
+      clearTimeout(bookSearchTimer);
+      if (q.length < 2) { hideBookResults(); return; }
+      bookSearchTimer = setTimeout(() => runBookSearch(q), 400);
+    });
+    bookSearchInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); clearTimeout(bookSearchTimer); const q = bookSearchInput.value.trim(); if (q.length >= 2) runBookSearch(q); }
+    });
+    bookSearchResults.addEventListener("click", (e) => {
+      const item = e.target.closest(".bsr-item");
+      if (!item) return;
+      const docs = bookSearchResults._docs || [];
+      const d = docs[Number(item.dataset.i)];
+      if (d) selectSearchedBook(d);
+    });
   }
 
   // ---------- Render: Books tab ----------
@@ -1758,6 +1880,107 @@
 
   document.getElementById("card-books-finished").addEventListener("click", openFinishedDrawer);
   document.getElementById("card-pages-read").addEventListener("click", openPagesDrawer);
+
+  // ---------- Discover: recommendations (OpenLibrary) ----------
+  function readAuthors() {
+    return [...new Set(books.filter(b => b.status === "finished" || b.status === "reading")
+      .map(b => (b.author || "").trim()).filter(Boolean))];
+  }
+  function topGenres() {
+    const counts = {};
+    books.filter(b => (b.status === "finished" || b.status === "reading") && b.genre && b.genre !== "Unspecified")
+      .forEach(b => { counts[b.genre] = (counts[b.genre] || 0) + 1 + (b.rating || 0) / 5; });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]).map(e => e[0]);
+  }
+  async function olSearch(params) {
+    const res = await fetch(`https://openlibrary.org/search.json?${params}&language=eng&fields=title,author_name,first_publish_year,number_of_pages_median,cover_i`);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    return (await res.json()).docs || [];
+  }
+  const recFromDoc = (d, why) => ({ title: d.title, author: (d.author_name && d.author_name[0]) || "", pages: d.number_of_pages_median || "", cover_i: d.cover_i, why });
+
+  let discoverSig = null, discoverLoading = false, discoverRecs = [];
+  async function renderDiscover(force) {
+    const body = document.getElementById("discoverBody");
+    if (!body) return;
+    const authors = readAuthors(), genres = topGenres();
+    const sig = JSON.stringify([authors, genres.slice(0, 3), books.map(b => b.title).sort()]);
+    if (!force && sig === discoverSig) return;
+    if (discoverLoading) return;
+    if (!authors.length && !genres.length) {
+      body.innerHTML = `<div class="drawer-empty">Start reading or finish a few books, and we'll suggest more like them here.</div>`;
+      discoverSig = sig; return;
+    }
+    discoverLoading = true;
+    body.innerHTML = `<div class="drawer-empty">Finding books you might like…</div>`;
+    try {
+      const owned = new Set(books.map(b => (b.title || "").trim().toLowerCase()));
+      const seen = new Set();
+      const pushUnique = (arr, rec, cap, counts, key) => {
+        const k = (rec.title || "").trim().toLowerCase();
+        if (!rec.cover_i || !rec.title || owned.has(k) || seen.has(k)) return;
+        if (counts && counts[key] >= cap) return;
+        seen.add(k); if (counts) counts[key] = (counts[key] || 0) + 1;
+        arr.push(rec);
+      };
+      const authorRecs = [], aCounts = {};
+      await Promise.all(authors.slice(0, 4).map(async a => {
+        try { (await olSearch(`author=${encodeURIComponent(a)}&sort=readinglog&limit=12`)).forEach(d => pushUnique(authorRecs, recFromDoc(d, "More from " + a), 4, aCounts, a)); } catch {}
+      }));
+      const genreRecs = [], gCounts = {};
+      await Promise.all(genres.slice(0, 3).map(async g => {
+        try { (await olSearch(`subject=${encodeURIComponent(g)}&sort=readinglog&limit=14`)).forEach(d => pushUnique(genreRecs, recFromDoc(d, g), 5, gCounts, g)); } catch {}
+      }));
+
+      discoverRecs = [];
+      const sections = [];
+      if (authorRecs.length) sections.push({ head: "More by authors you've read", items: authorRecs.slice(0, 12) });
+      if (genreRecs.length) sections.push({ head: "Popular in your genres", items: genreRecs.slice(0, 12) });
+      if (!sections.length) {
+        body.innerHTML = `<div class="drawer-empty">No new suggestions right now — looks like you've already shelved the popular ones!</div>`;
+      } else {
+        body.innerHTML = sections.map(sec => `
+          <div class="rec-section">
+            <div class="rec-head">${escapeHtml(sec.head)}</div>
+            <div class="rec-grid">
+              ${sec.items.map(rec => {
+                const i = discoverRecs.push(rec) - 1;
+                const cov = rec.cover_i ? `https://covers.openlibrary.org/b/id/${rec.cover_i}-M.jpg` : "";
+                return `<button type="button" class="rec-card" data-i="${i}">
+                  <div class="rec-cover">${cov ? `<img src="${cov}" alt="" loading="lazy" onerror="this.remove()">` : "📖"}</div>
+                  <span class="rec-add">＋ Add</span>
+                  <div class="rec-title">${escapeHtml(rec.title)}</div>
+                  <div class="rec-author">${escapeHtml(rec.author)}</div>
+                  <div class="rec-why">${escapeHtml(rec.why)}</div>
+                </button>`;
+              }).join("")}
+            </div>
+          </div>`).join("");
+      }
+      discoverSig = sig;
+    } catch (e) {
+      body.innerHTML = `<div class="drawer-empty">Couldn't load recommendations right now — try again in a moment.</div>`;
+    } finally {
+      discoverLoading = false;
+    }
+  }
+
+  function addBookFromSuggestion(rec) {
+    openBookModal(null);
+    document.getElementById("bf_title").value = rec.title || "";
+    document.getElementById("bf_author").value = rec.author || "";
+    document.getElementById("bf_total").value = rec.pages || "";
+    document.getElementById("bf_cover").value = rec.cover_i ? `https://covers.openlibrary.org/b/id/${rec.cover_i}-L.jpg` : "";
+    document.getElementById("bf_status").value = "to-read";
+  }
+  document.getElementById("discoverBody").addEventListener("click", (e) => {
+    const card = e.target.closest(".rec-card");
+    if (!card) return;
+    const rec = discoverRecs[Number(card.dataset.i)];
+    if (rec) addBookFromSuggestion(rec);
+  });
+  const discoverTabBtn = document.querySelector('nav.tabs button[data-tab="discover"]');
+  if (discoverTabBtn) discoverTabBtn.addEventListener("click", () => renderDiscover(false));
 
   // ---------- Render all ----------
   function renderAll() {
