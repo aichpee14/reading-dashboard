@@ -9,7 +9,6 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.1/chart.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <style>
   :root {
     color-scheme: light;
@@ -197,9 +196,17 @@
   .badge.finished { background: rgba(12,163,12,0.12); color: var(--status-good); }
   .badge.reading { background: rgba(42,120,214,0.12); color: var(--series-1); }
   .badge.dnf { background: rgba(208,59,59,0.12); color: var(--status-critical); }
+  .badge.toread { background: rgba(139,92,246,0.14); color: var(--vibe-purple); }
+  th.num, td.num { text-align: right; }
+  thead th[data-sort] { cursor: pointer; user-select: none; }
+  thead th[data-sort]:hover { color: var(--text-primary); }
+  thead th[data-sort].sort-asc::after { content: " ▲"; font-size: 10px; }
+  thead th[data-sort].sort-desc::after { content: " ▼"; font-size: 10px; }
+  tr.totals-row td { font-weight: 700; border-top: 2px solid var(--border-strong, var(--border)); background: var(--page-plane); }
+  tr.totals-row:hover td { background: var(--page-plane); }
 
   .controls-row { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
-  input[type="text"], input[type="number"], input[type="url"], select {
+  input[type="text"], input[type="number"], input[type="url"], input[type="date"], select {
     background: var(--page-plane); border: 1px solid var(--border); color: var(--text-primary);
     border-radius: 8px; padding: 8px 10px; font-size: 13px; font-family: inherit;
   }
@@ -211,6 +218,22 @@
     transition: transform 0.15s ease, box-shadow 0.15s ease, background-position 0.4s ease;
   }
   .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 10px 26px color-mix(in srgb, var(--vibe-pink) 45%, transparent); background-position: 100% 50%; }
+  .btn-primary:disabled { opacity: 0.6; cursor: default; transform: none; }
+
+  /* Add Entry button + row actions + modal */
+  .add-btn { background: var(--vibe-gradient); color: #fff; border-color: transparent; }
+  .add-btn:hover { border-color: transparent; }
+  .mini-btn { background: var(--page-plane); border: 1px solid var(--border); color: var(--text-primary); border-radius: 8px; padding: 4px 10px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
+  .mini-btn:hover { border-color: var(--vibe-purple); }
+  .mini-btn.danger:hover { border-color: var(--status-critical); color: var(--status-critical); }
+  .row-actions { display: flex; gap: 6px; white-space: nowrap; }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 16px; }
+  .modal-card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 18px; padding: 22px; width: 100%; max-width: 560px; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.35); }
+  .modal-card h3 { margin: 0 0 16px; font-family: var(--font-display); font-size: 18px; color: var(--text-primary); text-transform: none; letter-spacing: 0; }
+  .modal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px; }
+  @media (max-width: 520px) { .modal-grid { grid-template-columns: 1fr; } }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
+  .modal-card .field input, .modal-card .field select { width: 100%; box-sizing: border-box; }
 
   .empty-state { text-align: center; padding: 60px 20px; color: var(--text-secondary); }
   .empty-state h2 { color: var(--text-primary); font-size: 18px; }
@@ -321,9 +344,10 @@
   <div class="topbar">
     <div>
       <h1>📚 My Reading Dashboard</h1>
-      <p class="subtitle" id="subtitle">Connect your Google Sheet in the Settings tab to get started.</p>
+      <p class="subtitle" id="subtitle">Loading your reading data…</p>
     </div>
     <div style="display:flex; gap:8px;">
+      <button class="icon-btn add-btn" id="addEntryBtn">+ Add Entry</button>
       <button class="icon-btn" id="refreshBtn">↻ Refresh</button>
       <button class="icon-btn" id="themeBtn">🌓 Theme</button>
     </div>
@@ -332,6 +356,7 @@
 
 <nav class="tabs">
   <button data-tab="overview" class="active">Overview</button>
+  <button data-tab="books">Books</button>
   <button data-tab="streaks">Streaks &amp; Consistency</button>
   <button data-tab="goals">Goals &amp; Pacing</button>
   <button data-tab="genres">Genres &amp; Authors</button>
@@ -449,7 +474,43 @@
       </div>
       <div style="overflow-x:auto;">
         <table id="logTable">
-          <thead><tr><th>Date</th><th>Title</th><th>Author</th><th>Genre</th><th>Pages</th><th>Minutes</th><th>Status</th><th>Rating</th></tr></thead>
+          <thead><tr><th>Date</th><th>Title</th><th>Author</th><th>Genre</th><th>Pages</th><th>Minutes</th><th>Status</th><th>Rating</th><th>Actions</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- BOOKS -->
+  <section class="panel" id="panel-books">
+    <div class="card">
+      <div class="controls-row" style="justify-content:space-between;">
+        <div class="controls-row" style="margin:0;">
+          <input type="text" id="bookSearch" placeholder="Search title or author…">
+          <select id="bookStatusFilter">
+            <option value="">All statuses</option>
+            <option value="to-read">To read</option>
+            <option value="reading">Reading</option>
+            <option value="finished">Finished</option>
+            <option value="dnf">DNF</option>
+          </select>
+        </div>
+        <button class="btn-primary" id="addBookBtn">+ Add Book</button>
+      </div>
+      <div style="overflow-x:auto;">
+        <table id="booksTable">
+          <thead><tr>
+            <th data-sort="title">Title</th>
+            <th data-sort="author">Author</th>
+            <th data-sort="genre">Genre</th>
+            <th data-sort="status">Status</th>
+            <th data-sort="rating">Rating</th>
+            <th class="num" data-sort="totalPages">Total pages</th>
+            <th class="num" data-sort="pagesRead">Pages read</th>
+            <th class="num" data-sort="progress">Progress</th>
+            <th class="num" data-sort="sessions">Sessions</th>
+            <th data-no-sort="1">Actions</th>
+          </tr></thead>
           <tbody></tbody>
         </table>
       </div>
@@ -459,11 +520,7 @@
   <!-- SETTINGS -->
   <section class="panel" id="panel-settings">
     <div class="card" style="max-width:560px;">
-      <h3>Connect your Google Sheet</h3>
-      <label class="field">
-        Published CSV URL
-        <input type="url" id="csvUrlInput" placeholder="https://docs.google.com/spreadsheets/d/e/…/pub?output=csv">
-      </label>
+      <h3>Reading goals</h3>
       <label class="field">
         Yearly book goal
         <input type="number" id="goalBooksInput" placeholder="24">
@@ -472,9 +529,9 @@
         Yearly page goal (optional)
         <input type="number" id="goalPagesInput" placeholder="8000">
       </label>
-      <button class="btn-primary" id="saveSettingsBtn">Save &amp; Load Data</button>
+      <button class="btn-primary" id="saveSettingsBtn">Save Goals</button>
       <p style="font-size:12px; color:var(--text-muted); margin-top:14px;">
-        These settings are stored in your browser only (not sent anywhere). See the setup guide for how to get the published CSV URL from Google Sheets.
+        Your reading entries are stored in the app's database. Use “+ Add Entry” at the top to log a session, and Edit / Delete on the Log tab to fix mistakes. Goals are stored in this browser.
       </p>
       <p id="settingsStatus" style="font-size:13px; margin-top:10px;"></p>
     </div>
@@ -482,7 +539,62 @@
 
 </main>
 
-<footer>Reading Dashboard · data refreshes from your Google Sheet on load and every 5 minutes</footer>
+<div id="entryModal" class="modal-overlay" style="display:none;">
+  <div class="modal-card">
+    <h3 id="entryModalTitle">Log a Session</h3>
+    <form id="entryForm" autocomplete="off">
+      <input type="hidden" id="entryId">
+      <div class="modal-grid">
+        <label class="field" style="grid-column:1/-1;">Book
+          <select id="f_book" required></select>
+        </label>
+        <label class="field">Date<input type="date" id="f_date" required></label>
+        <label class="field">Pages Read<input type="number" id="f_pages" min="0" placeholder="0"></label>
+        <label class="field">Minutes Read<input type="number" id="f_minutes" min="0" placeholder="0"></label>
+      </div>
+      <p style="font-size:12px; color:var(--text-muted); margin:8px 0 0;">Book not listed? Add it on the <strong>Books</strong> tab first.</p>
+      <div class="modal-actions">
+        <button type="button" class="icon-btn" id="entryCancelBtn">Cancel</button>
+        <button type="submit" class="btn-primary" id="entrySaveBtn">Save</button>
+      </div>
+      <div class="lock-error" id="entryError"></div>
+    </form>
+  </div>
+</div>
+
+<div id="bookModal" class="modal-overlay" style="display:none;">
+  <div class="modal-card">
+    <h3 id="bookModalTitle">Add Book</h3>
+    <form id="bookForm" autocomplete="off">
+      <input type="hidden" id="bookId">
+      <div class="modal-grid">
+        <label class="field" style="grid-column:1/-1;">Title<input type="text" id="bf_title" required placeholder="e.g. The Hobbit"></label>
+        <label class="field">Author<input type="text" id="bf_author" list="authorList"></label>
+        <label class="field">Genre<input type="text" id="bf_genre" list="genreList"></label>
+        <label class="field">Status
+          <select id="bf_status">
+            <option value="to-read">To read</option>
+            <option value="reading">Reading</option>
+            <option value="finished">Finished</option>
+            <option value="dnf">DNF</option>
+          </select>
+        </label>
+        <label class="field">Rating (0–5)<input type="number" id="bf_rating" min="0" max="5" placeholder="—"></label>
+        <label class="field">Total Pages<input type="number" id="bf_total" min="0" placeholder="—"></label>
+        <label class="field" style="grid-column:1/-1;">Cover URL (optional)<input type="text" id="bf_cover" placeholder="https://…"></label>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="icon-btn" id="bookCancelBtn">Cancel</button>
+        <button type="submit" class="btn-primary" id="bookSaveBtn">Save</button>
+      </div>
+      <div class="lock-error" id="bookError"></div>
+    </form>
+    <datalist id="authorList"></datalist>
+    <datalist id="genreList"></datalist>
+  </div>
+</div>
+
+<footer>Reading Dashboard · entries saved to your database · goals stored in this browser</footer>
 </div>
 
 <script>
@@ -490,37 +602,56 @@
   "use strict";
 
   // ---------- Password lock ----------
-  // Basic deterrent only, not real security: this file is public, so a determined
-  // person could still find the hash below and crack a weak password offline.
-  const UNLOCK_HASH = "a228561359923961be47eb055597de7b309659fed1bb0c2db98f23612473a73e";
-  const UNLOCK_KEY = "reading-dashboard-unlocked";
+  // Auth: a shared password gates every /api call (verified server-side by the Worker)
+  // and doubles as the lock-screen login. After a successful unlock the password is kept
+  // in localStorage so it can be sent on API calls. This is a private family tool, not a
+  // secret store — but unlike the old client-only hash, the server now actually enforces it.
+  const AUTH_KEY = "reading-dashboard-auth";
+  let authPw = "";
+  try { authPw = localStorage.getItem(AUTH_KEY) || ""; } catch (e) { authPw = ""; }
 
-  async function sha256Hex(text) {
-    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+  function apiFetch(path, opts = {}) {
+    const headers = Object.assign({}, opts.headers, { "Authorization": "Bearer " + authPw });
+    if (opts.body && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
+    return fetch(path, Object.assign({}, opts, { headers }));
   }
 
   function showApp() {
     document.getElementById("lockScreen").style.display = "none";
     document.getElementById("appRoot").style.display = "block";
   }
+  function showLock(msg) {
+    document.getElementById("appRoot").style.display = "none";
+    document.getElementById("lockScreen").style.display = "";
+    document.getElementById("lockError").textContent = msg || "";
+  }
+  function handleAuthFail() {
+    authPw = "";
+    try { localStorage.removeItem(AUTH_KEY); } catch (e) {}
+    showLock("Session expired — enter the password again.");
+  }
 
   (function initLock() {
-    try {
-      if (localStorage.getItem(UNLOCK_KEY) === "true") { showApp(); return; }
-    } catch (e) { showApp(); return; } // if storage is unavailable, don't lock the user out entirely
-
     document.getElementById("lockForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       const val = document.getElementById("lockInput").value;
-      const hash = await sha256Hex(val);
-      if (hash === UNLOCK_HASH) {
-        try { localStorage.setItem(UNLOCK_KEY, "true"); } catch (err) {}
-        showApp();
-      } else {
-        document.getElementById("lockError").textContent = "Incorrect password.";
-        document.getElementById("lockInput").value = "";
-        document.getElementById("lockInput").focus();
+      authPw = val;
+      try {
+        const res = await apiFetch("/api/entries");
+        if (res.ok) {
+          try { localStorage.setItem(AUTH_KEY, val); } catch (err) {}
+          document.getElementById("lockError").textContent = "";
+          showApp();
+          loadData();
+        } else {
+          authPw = "";
+          document.getElementById("lockError").textContent = "Incorrect password.";
+          document.getElementById("lockInput").value = "";
+          document.getElementById("lockInput").focus();
+        }
+      } catch (err) {
+        authPw = "";
+        document.getElementById("lockError").textContent = "Couldn't reach the server. Please try again.";
       }
     });
   })();
@@ -529,7 +660,6 @@
   // Baked-in defaults so the dashboard works immediately for any visitor/browser,
   // without needing to re-paste the Sheet URL into Settings each time.
   const DEFAULT_CONFIG = {
-    csvUrl: "https://docs.google.com/spreadsheets/d/e/2PACX-1vTBniz9kLARYxnBh-ofky-aAkJX0b1Y_MV3IDXq0ZVrBYxy94IOVVwHGz1fQq55GSY_UhlwyrBnuKx9/pub?gid=0&single=true&output=csv",
     goalBooks: 24,
     goalPages: 8000
   };
@@ -576,27 +706,46 @@
   });
 
   // ---------- Settings form ----------
-  const csvUrlInput = document.getElementById("csvUrlInput");
   const goalBooksInput = document.getElementById("goalBooksInput");
   const goalPagesInput = document.getElementById("goalPagesInput");
-  csvUrlInput.value = config.csvUrl || "";
   goalBooksInput.value = config.goalBooks || "";
   goalPagesInput.value = config.goalPages || "";
 
   document.getElementById("saveSettingsBtn").addEventListener("click", () => {
-    config.csvUrl = csvUrlInput.value.trim();
     config.goalBooks = Number(goalBooksInput.value) || 0;
     config.goalPages = Number(goalPagesInput.value) || 0;
     saveConfig(config);
-    document.getElementById("settingsStatus").textContent = "Saved. Loading your data…";
+    document.getElementById("settingsStatus").textContent = "Saved.";
     document.getElementById("settingsStatus").style.color = "var(--text-secondary)";
-    loadData();
+    renderAll();
   });
 
   document.getElementById("refreshBtn").addEventListener("click", loadData);
 
   // ---------- Data loading ----------
-  let rows = []; // normalized reading log rows
+  let rows = []; // normalized reading sessions
+  let books = []; // normalized books catalog (with aggregates)
+
+  function normalizeBook(b) {
+    const total = (b.total_pages != null && b.total_pages !== "") ? Number(b.total_pages) : null;
+    const pagesRead = Number(b.pages_read) || 0;
+    return {
+      id: b.id,
+      title: b.title || "",
+      author: b.author || "",
+      genre: b.genre || "Unspecified",
+      totalPages: total,
+      status: b.status || "reading",
+      rating: (b.rating != null && b.rating !== "") ? Number(b.rating) : null,
+      coverUrl: b.cover_url || "",
+      pagesRead,
+      minutes: Number(b.minutes) || 0,
+      sessions: Number(b.sessions) || 0,
+      lastRead: b.last_read || null,
+      progress: (total && total > 0) ? Math.min(100, Math.round((pagesRead / total) * 100)) : null,
+    };
+  }
+  function finishedBookCount() { return books.filter(b => b.status === "finished").length; }
 
   function parseLocalDate(str) {
     if (!str) return null;
@@ -622,7 +771,11 @@
     const dateStr = get(["date"]);
     const date = dateStr ? parseLocalDate(dateStr) : null;
     const status = (get(["status"]) || "").toString().trim().toLowerCase();
+    const idRaw = get(["id"]);
+    const bookIdRaw = get(["book_id"]);
     return {
+      id: (idRaw !== "" && idRaw != null) ? Number(idRaw) : null,
+      bookId: (bookIdRaw !== "" && bookIdRaw != null) ? Number(bookIdRaw) : null,
       date: date,
       title: (get(["book title", "title", "book"]) || "").toString().trim(),
       author: (get(["author"]) || "").toString().trim(),
@@ -636,38 +789,30 @@
     };
   }
 
-  function loadData() {
-    const cfg = loadConfig();
-    if (!cfg.csvUrl) {
-      showEmptyState();
-      return;
-    }
-    if (typeof Papa === "undefined" || typeof Chart === "undefined") {
+  async function loadData() {
+    if (!authPw) { showLock(); return; }
+    if (typeof Chart === "undefined") {
       document.getElementById("subtitle").textContent =
-        "A required script didn't load (Chart.js and/or PapaParse). Check your internet connection, disable any ad blocker for this page, and reload.";
+        "Chart.js didn't load. Check your internet connection, disable any ad blocker for this page, and reload.";
       return;
     }
     document.getElementById("subtitle").textContent = "Loading your reading data…";
-    Papa.parse(cfg.csvUrl, {
-      download: true,
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        rows = results.data.map(normalizeRow).filter(r => r.date);
-        rows.sort((a, b) => a.date - b.date);
-        document.getElementById("subtitle").textContent =
-          rows.length ? `Loaded ${rows.length} reading log entries.` : "Connected, but no rows found yet — log some reading in your sheet!";
-        renderAll();
-      },
-      error: () => {
-        document.getElementById("subtitle").textContent =
-          "Couldn't load your sheet. Check the CSV URL in Settings and that it's published to the web.";
-      }
-    });
-  }
-
-  function showEmptyState() {
-    document.getElementById("subtitle").textContent = "Connect your Google Sheet in the Settings tab to get started.";
+    try {
+      const [rb, re] = await Promise.all([apiFetch("/api/books"), apiFetch("/api/entries")]);
+      if (rb.status === 401 || re.status === 401) { handleAuthFail(); return; }
+      if (!rb.ok || !re.ok) throw new Error("HTTP " + rb.status + "/" + re.status);
+      books = (await rb.json()).map(normalizeBook);
+      rows = (await re.json()).map(normalizeRow).filter(r => r.date);
+      rows.sort((a, b) => a.date - b.date);
+      const bf = finishedBookCount();
+      document.getElementById("subtitle").textContent = books.length
+        ? `${books.length} book${books.length === 1 ? "" : "s"} · ${rows.length} session${rows.length === 1 ? "" : "s"} · ${bf} finished.`
+        : "No books yet — open the Books tab and click “+ Add Book” to start your shelf!";
+      renderAll();
+    } catch (e) {
+      document.getElementById("subtitle").textContent =
+        "Couldn't load your data. Check your connection and hit ↻ Refresh.";
+    }
   }
 
   // ---------- Helpers ----------
@@ -741,7 +886,7 @@
     const now = new Date();
     const yearStart = startOfYear(now);
     const ytdRows = rows.filter(r => r.date >= yearStart);
-    const booksFinished = ytdRows.filter(r => r.status === "finished").length;
+    const booksFinished = finishedBookCount();
     const pagesRead = ytdRows.reduce((s, r) => s + r.pages, 0);
     const streaks = computeStreaks();
 
@@ -1083,7 +1228,7 @@
 
     // Books
     const goalBooks = cfg.goalBooks || 0;
-    const booksFinished = ytdRows.filter(r => r.status === "finished").length;
+    const booksFinished = finishedBookCount();
     if (goalBooks > 0) {
       const pct = Math.min(100, Math.round((booksFinished / goalBooks) * 100));
       document.getElementById("goalBooksSummary").textContent = `${booksFinished} of ${goalBooks} books`;
@@ -1193,7 +1338,7 @@
     });
 
     const authorCounts = {};
-    rows.filter(r => r.status === "finished").forEach(r => { authorCounts[r.author] = (authorCounts[r.author] || 0) + 1; });
+    books.filter(b => b.status === "finished").forEach(b => { if (b.author) authorCounts[b.author] = (authorCounts[b.author] || 0) + 1; });
     const aEntries = Object.entries(authorCounts).filter(e=>e[0]).sort((a,b) => b[1]-a[1]).slice(0, 8);
 
     destroyChart("authorBar");
@@ -1230,6 +1375,10 @@
         <td>${r.minutes || ""}</td>
         <td><span class="badge ${r.status}">${r.status}</span></td>
         <td>${r.rating ? "★".repeat(r.rating) : ""}</td>
+        <td>${r.id != null ? `<div class="row-actions">
+          <button class="mini-btn" data-act="edit" data-id="${r.id}">Edit</button>
+          <button class="mini-btn danger" data-act="del" data-id="${r.id}">Delete</button>
+        </div>` : ""}</td>
       `;
       tbody.appendChild(tr);
     });
@@ -1239,10 +1388,264 @@
   document.getElementById("logSearch").addEventListener("input", renderLog);
   document.getElementById("logStatusFilter").addEventListener("change", renderLog);
 
+  // ---------- Session logging (Add / Edit / Delete a reading session) ----------
+  const entryModal = document.getElementById("entryModal");
+
+  function refreshDatalists() {
+    const uniq = (key) => [...new Set(books.map(b => b[key]).filter(v => v && v !== "Unspecified"))].sort();
+    const opts = (arr) => arr.map(v => `<option value="${escapeHtml(v)}">`).join("");
+    const al = document.getElementById("authorList"); if (al) al.innerHTML = opts(uniq("author"));
+    const gl = document.getElementById("genreList"); if (gl) gl.innerHTML = opts(uniq("genre"));
+  }
+  function todayIso() {
+    const d = new Date();
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
+  function populateBookSelect(selectedId) {
+    const sel = document.getElementById("f_book");
+    const list = books.slice().sort((a, b) => a.title.toLowerCase().localeCompare(b.title.toLowerCase()));
+    sel.innerHTML = list.map(b => `<option value="${b.id}">${escapeHtml(b.title)}${b.author ? " — " + escapeHtml(b.author) : ""}</option>`).join("");
+    if (selectedId != null) sel.value = String(selectedId);
+  }
+
+  function openEntryModal(row) {
+    document.getElementById("entryError").textContent = "";
+    if (!books.length) { alert("Add a book on the Books tab first, then you can log reading sessions against it."); return; }
+    const set = (id, v) => { document.getElementById(id).value = (v == null ? "" : v); };
+    if (row && row.id != null) {
+      document.getElementById("entryModalTitle").textContent = "Edit Session";
+      set("entryId", row.id);
+      populateBookSelect(row.bookId);
+      set("f_date", dayKey(row.date));
+      set("f_pages", row.pages || "");
+      set("f_minutes", row.minutes || "");
+    } else {
+      document.getElementById("entryModalTitle").textContent = "Log a Session";
+      document.getElementById("entryForm").reset();
+      set("entryId", "");
+      populateBookSelect(books[0] && books[0].id);
+      set("f_date", todayIso());
+    }
+    entryModal.style.display = "flex";
+    document.getElementById("f_book").focus();
+  }
+  function closeEntryModal() { entryModal.style.display = "none"; }
+
+  document.getElementById("addEntryBtn").addEventListener("click", () => openEntryModal(null));
+  document.getElementById("entryCancelBtn").addEventListener("click", closeEntryModal);
+  entryModal.addEventListener("click", (e) => { if (e.target === entryModal) closeEntryModal(); });
+
+  document.getElementById("entryForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const id = document.getElementById("entryId").value;
+    const body = {
+      book_id: Number(document.getElementById("f_book").value) || null,
+      date: document.getElementById("f_date").value,
+      pages_read: Number(document.getElementById("f_pages").value) || 0,
+      minutes_read: Number(document.getElementById("f_minutes").value) || 0,
+    };
+    if (!body.book_id || !body.date) { document.getElementById("entryError").textContent = "Book and Date are required."; return; }
+    const saveBtn = document.getElementById("entrySaveBtn");
+    saveBtn.disabled = true; saveBtn.textContent = "Saving…";
+    try {
+      const res = await apiFetch(id ? `/api/entries/${id}` : "/api/entries", { method: id ? "PUT" : "POST", body: JSON.stringify(body) });
+      if (res.status === 401) { handleAuthFail(); return; }
+      if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error || ("HTTP " + res.status)); }
+      closeEntryModal();
+      await loadData();
+    } catch (err) {
+      document.getElementById("entryError").textContent = "Save failed: " + err.message;
+    } finally {
+      saveBtn.disabled = false; saveBtn.textContent = "Save";
+    }
+  });
+
+  async function deleteEntry(id, row) {
+    const label = row ? `the session on ${dayKey(row.date)} for “${row.title}”` : "this session";
+    if (!confirm(`Delete ${label}? This cannot be undone.`)) return;
+    try {
+      const res = await apiFetch(`/api/entries/${id}`, { method: "DELETE" });
+      if (res.status === 401) { handleAuthFail(); return; }
+      if (!res.ok && res.status !== 204) throw new Error("HTTP " + res.status);
+      await loadData();
+    } catch (err) { alert("Delete failed: " + err.message); }
+  }
+
+  document.querySelector("#logTable tbody").addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-act]");
+    if (!btn) return;
+    const id = Number(btn.dataset.id);
+    const row = rows.find(r => r.id === id);
+    if (btn.dataset.act === "edit") openEntryModal(row);
+    else deleteEntry(id, row);
+  });
+
+  // ---------- Books catalog (Add / Edit / Delete a book) ----------
+  const bookModal = document.getElementById("bookModal");
+
+  function openBookModal(book) {
+    refreshDatalists();
+    document.getElementById("bookError").textContent = "";
+    const set = (id, v) => { document.getElementById(id).value = (v == null ? "" : v); };
+    if (book && book.id != null) {
+      document.getElementById("bookModalTitle").textContent = "Edit Book";
+      set("bookId", book.id);
+      set("bf_title", book.title);
+      set("bf_author", book.author);
+      set("bf_genre", (book.genre && book.genre !== "Unspecified") ? book.genre : "");
+      set("bf_status", book.status || "reading");
+      set("bf_rating", book.rating || "");
+      set("bf_total", book.totalPages || "");
+      set("bf_cover", book.coverUrl || "");
+    } else {
+      document.getElementById("bookModalTitle").textContent = "Add Book";
+      document.getElementById("bookForm").reset();
+      set("bookId", "");
+      set("bf_status", "reading");
+    }
+    bookModal.style.display = "flex";
+    document.getElementById("bf_title").focus();
+  }
+  function closeBookModal() { bookModal.style.display = "none"; }
+
+  document.getElementById("addBookBtn").addEventListener("click", () => openBookModal(null));
+  document.getElementById("bookCancelBtn").addEventListener("click", closeBookModal);
+  bookModal.addEventListener("click", (e) => { if (e.target === bookModal) closeBookModal(); });
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (entryModal.style.display === "flex") closeEntryModal();
+    if (bookModal.style.display === "flex") closeBookModal();
+  });
+
+  document.getElementById("bookForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const id = document.getElementById("bookId").value;
+    const numOrNull = (id2) => { const v = document.getElementById(id2).value; return v === "" ? null : Number(v); };
+    const body = {
+      title: document.getElementById("bf_title").value.trim(),
+      author: document.getElementById("bf_author").value.trim(),
+      genre: document.getElementById("bf_genre").value.trim(),
+      status: document.getElementById("bf_status").value,
+      rating: numOrNull("bf_rating"),
+      total_pages: numOrNull("bf_total"),
+      cover_url: document.getElementById("bf_cover").value.trim(),
+    };
+    if (!body.title) { document.getElementById("bookError").textContent = "Title is required."; return; }
+    const saveBtn = document.getElementById("bookSaveBtn");
+    saveBtn.disabled = true; saveBtn.textContent = "Saving…";
+    try {
+      const res = await apiFetch(id ? `/api/books/${id}` : "/api/books", { method: id ? "PUT" : "POST", body: JSON.stringify(body) });
+      if (res.status === 401) { handleAuthFail(); return; }
+      if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error || ("HTTP " + res.status)); }
+      closeBookModal();
+      await loadData();
+    } catch (err) {
+      document.getElementById("bookError").textContent = "Save failed: " + err.message;
+    } finally {
+      saveBtn.disabled = false; saveBtn.textContent = "Save";
+    }
+  });
+
+  async function deleteBook(id, book) {
+    if (book && book.sessions > 0) {
+      alert(`“${book.title}” has ${book.sessions} logged session${book.sessions === 1 ? "" : "s"}. Delete those on the Log tab first, or mark the book DNF instead.`);
+      return;
+    }
+    if (!confirm(`Delete “${book ? book.title : "this book"}”? This cannot be undone.`)) return;
+    try {
+      const res = await apiFetch(`/api/books/${id}`, { method: "DELETE" });
+      if (res.status === 401) { handleAuthFail(); return; }
+      if (res.status === 409) { const j = await res.json().catch(() => ({})); alert(`Can't delete — this book still has ${j.sessions || "some"} session(s). Remove them on the Log tab first.`); return; }
+      if (!res.ok && res.status !== 204) throw new Error("HTTP " + res.status);
+      await loadData();
+    } catch (err) { alert("Delete failed: " + err.message); }
+  }
+
+  // ---------- Render: Books tab ----------
+  let booksSort = { key: "title", dir: 1 };
+  function renderBooks() {
+    const tbody = document.querySelector("#booksTable tbody");
+    if (!tbody) return;
+    const search = (document.getElementById("bookSearch").value || "").toLowerCase();
+    const stFilter = document.getElementById("bookStatusFilter").value;
+    let list = books.filter(b => {
+      if (stFilter && b.status !== stFilter) return false;
+      if (search && !(b.title.toLowerCase().includes(search) || b.author.toLowerCase().includes(search))) return false;
+      return true;
+    });
+    const { key, dir } = booksSort;
+    list.sort((a, c) => {
+      let x = a[key], y = c[key];
+      if (typeof x === "string" || typeof y === "string") {
+        x = (x == null ? "" : String(x)).toLowerCase(); y = (y == null ? "" : String(y)).toLowerCase();
+        return x < y ? -dir : x > y ? dir : 0;
+      }
+      x = (x == null ? -Infinity : x); y = (y == null ? -Infinity : y);
+      return (x - y) * dir;
+    });
+    document.querySelectorAll("#booksTable thead th[data-sort]").forEach(th => {
+      th.classList.remove("sort-asc", "sort-desc");
+      if (th.dataset.sort === key) th.classList.add(dir === 1 ? "sort-asc" : "sort-desc");
+    });
+    const stLabel = (s) => s === "to-read" ? "to read" : s;
+    const stClass = (s) => s === "to-read" ? "toread" : s;
+    tbody.innerHTML = "";
+    list.forEach(b => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${escapeHtml(b.title)}</td>
+        <td>${escapeHtml(b.author)}</td>
+        <td>${escapeHtml(b.genre)}</td>
+        <td><span class="badge ${stClass(b.status)}">${stLabel(b.status)}</span></td>
+        <td>${b.rating ? "★".repeat(b.rating) : ""}</td>
+        <td class="num">${b.totalPages != null ? b.totalPages.toLocaleString() : ""}</td>
+        <td class="num">${b.pagesRead.toLocaleString()}</td>
+        <td class="num">${b.progress != null ? b.progress + "%" : ""}</td>
+        <td class="num">${b.sessions}</td>
+        <td><div class="row-actions">
+          <button class="mini-btn" data-bact="edit" data-id="${b.id}">Edit</button>
+          <button class="mini-btn danger" data-bact="del" data-id="${b.id}">Delete</button>
+        </div></td>`;
+      tbody.appendChild(tr);
+    });
+    const totRead = list.reduce((s, b) => s + b.pagesRead, 0);
+    const totTotal = list.reduce((s, b) => s + (b.totalPages || 0), 0);
+    const totSessions = list.reduce((s, b) => s + b.sessions, 0);
+    const finished = list.filter(b => b.status === "finished").length;
+    const tr = document.createElement("tr");
+    tr.className = "totals-row";
+    tr.innerHTML = `
+      <td>Total · ${list.length} book${list.length === 1 ? "" : "s"} · ${finished} finished</td>
+      <td></td><td></td><td></td><td></td>
+      <td class="num">${totTotal ? totTotal.toLocaleString() : ""}</td>
+      <td class="num">${totRead.toLocaleString()}</td>
+      <td class="num"></td>
+      <td class="num">${totSessions}</td>
+      <td></td>`;
+    tbody.appendChild(tr);
+  }
+
+  document.querySelectorAll("#booksTable thead th[data-sort]").forEach(th => {
+    th.addEventListener("click", () => {
+      const k = th.dataset.sort;
+      if (booksSort.key === k) booksSort.dir *= -1; else booksSort = { key: k, dir: 1 };
+      renderBooks();
+    });
+  });
+  document.getElementById("bookSearch").addEventListener("input", renderBooks);
+  document.getElementById("bookStatusFilter").addEventListener("change", renderBooks);
+  document.querySelector("#booksTable tbody").addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-bact]");
+    if (!btn) return;
+    const id = Number(btn.dataset.id);
+    const book = books.find(b => b.id === id);
+    if (btn.dataset.bact === "edit") openBookModal(book);
+    else deleteBook(id, book);
+  });
+
   // ---------- Render all ----------
   function renderAll() {
-    if (!rows.length) return;
-    const sections = [renderOverview, renderStreaks, renderGoals, renderGenres, renderLog];
+    const sections = [renderBooks, renderOverview, renderStreaks, renderGoals, renderGenres, renderLog];
     sections.forEach(fn => {
       try { fn(); }
       catch (e) {
@@ -1252,9 +1655,11 @@
   }
 
   // ---------- Init ----------
-  if (config.csvUrl) loadData();
-  else showEmptyState();
-  setInterval(() => { if (loadConfig().csvUrl) loadData(); }, 5 * 60 * 1000);
+  if (authPw) { showApp(); loadData(); }
+  else { showLock(); }
+  setInterval(() => {
+    if (authPw && document.getElementById("appRoot").style.display !== "none" && entryModal.style.display !== "flex" && bookModal.style.display !== "flex") loadData();
+  }, 5 * 60 * 1000);
 
 })();
 </script>

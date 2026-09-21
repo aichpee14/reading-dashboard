@@ -1,0 +1,19 @@
+{
+  "name": "reading-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Hussain Patel reading dashboard — Cloudflare Worker (static assets) + D1",
+  "scripts": {
+    "dev": "wrangler dev",
+    "push:cloudflare": "wrangler deploy",
+    "deploy": "wrangler deploy",
+    "push:github": "node scripts/push-github.mjs",
+    "db:schema:local": "wrangler d1 execute reading-dashboard-db --local --file schema.sql",
+    "db:schema:remote": "wrangler d1 execute reading-dashboard-db --remote --file schema.sql",
+    "db:import:remote": "wrangler d1 execute reading-dashboard-db --remote --file import.sql",
+    "test:api": "node scripts/test-api.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.133.0"
+  }
+}

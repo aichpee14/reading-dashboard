@@ -1,5 +1,14 @@
 name = "reading-dashboard"
+main = "src/index.js"
 compatibility_date = "2026-09-17"
+# Pin the deploy target to Hussain's Cloudflare account (Hussainpatel14@gmail.com).
+account_id = "028627afabf2bcb8f9dc35d1864d2d0e"
 
 [assets]
-directory = "."
+directory = "./public"
+binding = "ASSETS"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "reading-dashboard-db"
+database_id = "c60fb316-407b-47c5-bf08-c9581a57daff"
