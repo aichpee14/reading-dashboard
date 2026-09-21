@@ -913,7 +913,10 @@
     card.style.display = "";
     row.innerHTML = "";
     books.forEach(b => {
-      const pct = forceFinished ? 100 : (b.totalPages ? Math.min(100, Math.round((b.pagesSoFar / b.totalPages) * 100)) : null);
+      // Finished books just get the checkmark badge — no water-fill animation,
+      // since "finished" already says 100% on its own. The pour-in liquid effect
+      // is reserved for Currently Reading, where the percentage is meaningful.
+      const pct = forceFinished ? null : (b.totalPages ? Math.min(100, Math.round((b.pagesSoFar / b.totalPages) * 100)) : null);
       const div = document.createElement("div");
       div.className = "book-card";
       div.innerHTML = `
@@ -921,7 +924,7 @@
           <div class="book-cover-placeholder">📖</div>
           ${forceFinished ? `<span class="book-finished-badge">✅</span>` : ""}
           ${pct !== null ? `
-            <div class="book-fill-overlay${forceFinished ? " is-finished" : ""}" style="height:0%">
+            <div class="book-fill-overlay" style="height:0%">
               <div class="wave"></div><div class="wave wave2"></div>
             </div>
             <div class="book-pct-label">${pct}%</div>
