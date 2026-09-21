@@ -761,7 +761,7 @@
   // ---------- Book covers + progress fill (Currently Reading / Books Finished) ----------
   // Only successful lookups are cached permanently; failed/no-match lookups are
   // retried on future loads rather than being remembered as permanent failures.
-  const COVER_CACHE_KEY = "reading-dashboard-cover-cache-v3"; // bumped: v2 could cache a mismatched cover
+  const COVER_CACHE_KEY = "reading-dashboard-cover-cache-v4"; // bumped again: invalidates any previously-cached mismatched cover
   function loadCoverCache() {
     try { return JSON.parse(localStorage.getItem(COVER_CACHE_KEY)) || {}; } catch (e) { return {}; }
   }
@@ -776,35 +776,62 @@
     return res.json();
   }
 
+  // Guard against the API's own fuzzy ranking handing back a different book
+  // in the same series/collection: only trust a result if its own title
+  // shares most of the significant words of what was actually searched for.
+  function normalizeWords(s) {
+    return (s || "").toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter(w => w.length > 2);
+  }
+  function titlesLooselyMatch(queryTitle, resultTitle) {
+    const qWords = normalizeWords(queryTitle);
+    if (!qWords.length) return true;
+    const rWords = new Set(normalizeWords(resultTitle));
+    const overlap = qWords.filter(w => rWords.has(w)).length;
+    return overlap / qWords.length >= 0.6;
+  }
+
   // intitle:/inauthor: only bind to the single next word unless quoted, so an
   // unquoted multi-word title can pull in the wrong book (e.g. another entry
   // in the same series). Quoting keeps the match tied to the whole phrase.
+  // Also checks several candidates (not just the top hit) against the
+  // requested title, since even a quoted query can rank a related-but-wrong
+  // book first.
   async function fetchFromGoogleBooksStrict(title, author) {
     const q = encodeURIComponent(`intitle:"${title}" inauthor:"${author}"`);
-    const data = await fetchJson(`https://www.googleapis.com/books/v1/volumes?q=${q}&maxResults=1`);
-    const item = data.items && data.items[0];
-    const img = item && item.volumeInfo && item.volumeInfo.imageLinks;
-    if (!img) return null;
-    return (img.thumbnail || img.smallThumbnail || "").replace("http://", "https://") || null;
+    const data = await fetchJson(`https://www.googleapis.com/books/v1/volumes?q=${q}&maxResults=5`);
+    return pickBestGoogleMatch(data, title);
   }
 
   // Looser pass for titles that don't exactly match the official one (a
   // shortened or slightly misremembered title in the sheet, say).
   async function fetchFromGoogleBooksLoose(title, author) {
     const q = encodeURIComponent(`${title} ${author}`);
-    const data = await fetchJson(`https://www.googleapis.com/books/v1/volumes?q=${q}&maxResults=1`);
-    const item = data.items && data.items[0];
-    const img = item && item.volumeInfo && item.volumeInfo.imageLinks;
-    if (!img) return null;
-    return (img.thumbnail || img.smallThumbnail || "").replace("http://", "https://") || null;
+    const data = await fetchJson(`https://www.googleapis.com/books/v1/volumes?q=${q}&maxResults=5`);
+    return pickBestGoogleMatch(data, title);
+  }
+
+  function pickBestGoogleMatch(data, requestedTitle) {
+    const items = data.items || [];
+    for (const item of items) {
+      const info = item.volumeInfo || {};
+      const img = info.imageLinks;
+      if (!img) continue;
+      if (!titlesLooselyMatch(requestedTitle, info.title)) continue;
+      return (img.thumbnail || img.smallThumbnail || "").replace("http://", "https://") || null;
+    }
+    return null;
   }
 
   async function fetchFromOpenLibrary(title, author) {
-    const q = `title=${encodeURIComponent(title)}&author=${encodeURIComponent(author)}&limit=1&fields=cover_i`;
+    const q = `title=${encodeURIComponent(title)}&author=${encodeURIComponent(author)}&limit=5&fields=cover_i,title`;
     const data = await fetchJson(`https://openlibrary.org/search.json?${q}`);
-    const doc = data.docs && data.docs[0];
-    if (!doc || !doc.cover_i) return null;
-    return `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg`;
+    const docs = data.docs || [];
+    for (const doc of docs) {
+      if (!doc.cover_i) continue;
+      if (!titlesLooselyMatch(title, doc.title)) continue;
+      return `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg`;
+    }
+    return null;
   }
 
   // A small queue so cover lookups go out staggered, not all at once — the
