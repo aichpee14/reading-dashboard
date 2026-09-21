@@ -624,14 +624,15 @@
     const status = (get(["status"]) || "").toString().trim().toLowerCase();
     return {
       date: date,
-      title: get(["book title", "title", "book"]) || "",
-      author: get(["author"]) || "",
+      title: (get(["book title", "title", "book"]) || "").toString().trim(),
+      author: (get(["author"]) || "").toString().trim(),
       genre: get(["genre"]) || "Unspecified",
       pages: Number(get(["pages read", "pages"])) || 0,
       minutes: Number(get(["minutes read", "minutes"])) || 0,
       status: status.includes("finish") ? "finished" : status.includes("dnf") ? "dnf" : "reading",
       rating: Number(get(["rating"])) || null,
       totalPages: Number(get(["total pages", "book length"])) || null,
+      coverUrl: (get(["cover url", "cover image", "cover"]) || "").toString().trim(),
     };
   }
 
@@ -880,10 +881,11 @@
     rows.forEach(r => {
       if (!r.title) return;
       const key = (r.title + "|" + r.author).toLowerCase();
-      if (!byBook[key]) byBook[key] = { title: r.title, author: r.author, totalPages: null, pagesSoFar: 0, lastDate: r.date, latestStatus: r.status };
+      if (!byBook[key]) byBook[key] = { title: r.title, author: r.author, totalPages: null, pagesSoFar: 0, lastDate: r.date, latestStatus: r.status, coverUrl: "" };
       const b = byBook[key];
       b.pagesSoFar += r.pages;
       if (r.totalPages) b.totalPages = r.totalPages;
+      if (r.coverUrl) b.coverUrl = r.coverUrl;
       if (r.date >= b.lastDate) { b.lastDate = r.date; b.latestStatus = r.status; }
     });
     return Object.values(byBook);
@@ -937,7 +939,10 @@
         requestAnimationFrame(() => requestAnimationFrame(() => { fillEl.style.height = pct + "%"; }));
       }
 
-      fetchCoverUrl(b.title, b.author).then(url => {
+      // A manually-supplied "Cover URL" in the sheet always wins over auto-lookup —
+      // it's the guaranteed-correct escape hatch for books the free APIs get wrong.
+      const coverPromise = b.coverUrl ? Promise.resolve(b.coverUrl) : fetchCoverUrl(b.title, b.author);
+      coverPromise.then(url => {
         if (!url) return;
         const wrap = div.querySelector(".book-cover-wrap");
         const placeholder = wrap.querySelector(".book-cover-placeholder");
